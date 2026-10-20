@@ -8,6 +8,16 @@
 
 enum class DeviceState { Disconnected = 0, Connecting, Connected };
 
+enum class PairingStatus {
+    Idle,
+    ConnectingToAp,
+    WaitingForCredentials,
+    Succeeded,
+    WrongPassword,
+    TimeOut,
+    Cancelled
+};
+
 enum class FanMode {
     Auto = 1,
     Turbo = 2,
