@@ -1,0 +1,26 @@
+# Build output
+build/
+build-*/
+cmake-build-*/
+out/
+
+# Qt Creator / IDE
+CMakeLists.txt.user*
+*.user
+.qtcreator/
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local data (never commit)
+*.db
+*.sqlite
+*.env
+
+# OS
+Thumbs.db
+.DS_Store
