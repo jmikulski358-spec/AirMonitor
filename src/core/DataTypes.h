@@ -8,14 +8,16 @@
 
 enum class DeviceState { Disconnected = 0, Connecting, Connected };
 
-enum class PairingStatus {
+enum class PairingState {
     Idle,
     ConnectingToAp,
+    WaitingForResult,
     WaitingForCredentials,
     Succeeded,
     WrongPassword,
-    TimeOut,
-    Cancelled
+    TimedOut,
+    Cancelled,
+    NetworkError
 };
 
 enum class FanMode {

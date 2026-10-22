@@ -9,15 +9,15 @@
 ConnectionManager::ConnectionManager(QObject *parent)
     : QObject(parent)
     , m_connectTimer(new QTimer(this))
-    , m_livenessTimer(new QTimer(this))
+    , m_aliveTimer(new QTimer(this))
 {
     m_connectTimer->setSingleShot(true);
     m_connectTimer->setInterval(kConnectTimeoutMs);
-    m_livenessTimer->setSingleShot(true);
-    m_livenessTimer->setInterval(kLivenessTimeoutMs);
+    m_aliveTimer->setSingleShot(true);
+    m_aliveTimer->setInterval(kLivenessTimeoutMs);
 
     connect(m_connectTimer, &QTimer::timeout, this, &ConnectionManager::onConnectTimeout);
-    connect(m_livenessTimer, &QTimer::timeout, this, &ConnectionManager::onLivenessTimeout);
+    connect(m_aliveTimer, &QTimer::timeout, this, &ConnectionManager::onAliveTimeout);
 }
 
 void ConnectionManager::connectToDevice(const QString &deviceId, const QHostAddress &address, quint16 port)
@@ -33,6 +33,19 @@ void ConnectionManager::connectToDevice(const QString &deviceId, const QHostAddr
         dropConnection(false); // synchronous: the old link is gone before the new one starts
     }
     startConnecting(deviceId, address, port);
+}
+
+void ConnectionManager::connectForPairing(const QHostAddress &address, quint16 port)
+{
+    if (m_pairingMode && m_state == DeviceState::Connecting) {
+        qWarning() << "connectForPairing ignored: a pairing connection attempt is in progress";
+        return;
+    }
+    if (m_state != DeviceState::Disconnected) {
+        dropConnection(false);   // also clears m_pairingMode
+    }
+    m_pairingMode = true;        // must be set before startConnecting. setState() uses it to pick the signal
+    startConnecting(QString(), address, port);
 }
 
 void ConnectionManager::disconnectFromDevice()
@@ -107,15 +120,19 @@ void ConnectionManager::destroySocket()
 void ConnectionManager::dropConnection(bool lost)
 {
     m_connectTimer->stop();
-    m_livenessTimer->stop();
+    m_aliveTimer->stop();
     destroySocket();
 
     const bool wasConnected = (m_state == DeviceState::Connected);
+    const bool wasPairing = m_pairingMode;
     const QString previousId = m_activeDeviceId;
     m_activeDeviceId.clear();
 
-    setState(DeviceState::Disconnected);
-    if (wasConnected) {
+    setState(DeviceState::Disconnected);   // still routed by m_pairingMode
+    m_pairingMode = false;
+
+    // The rest of the app only hears about normal connections.
+    if (wasConnected && !wasPairing) {
         emit activeDeviceChanged(QString());
         if (lost) {
             emit connectionLost(previousId);
@@ -129,7 +146,11 @@ void ConnectionManager::setState(DeviceState state)
         return;
     }
     m_state = state;
-    emit connectionStatusChanged(m_targetDeviceId, m_state);
+    if (m_pairingMode) {
+        emit pairingConnectionChanged(m_state);
+    } else {
+        emit connectionStatusChanged(m_targetDeviceId, m_state);
+    }
 }
 
 void ConnectionManager::onSocketConnected()
@@ -138,6 +159,13 @@ void ConnectionManager::onSocketConnected()
         return;
     }
     m_connectTimer->stop();
+
+    if (m_pairingMode) {
+        // No device id yet, so no m_activeDeviceId and no activeDeviceChanged.
+        setState(DeviceState::Connected);
+        return;
+    }
+
     m_activeDeviceId = m_targetDeviceId;
     setState(DeviceState::Connected);
     emit activeDeviceChanged(m_activeDeviceId);
@@ -145,12 +173,23 @@ void ConnectionManager::onSocketConnected()
 
 void ConnectionManager::onSocketDisconnected()
 {
-    if (m_state == DeviceState::Connected) {
-        dropConnection(true);   // nobody asked for this: the link was lost
-    } else if (m_state == DeviceState::Connecting) {
-        const QString id = m_targetDeviceId;
+    // Remember everything BEFORE dropConnection(): it resets the state and the pairing flag.
+    const bool pairing = m_pairingMode;
+    const DeviceState previous = m_state;
+    const QString id = m_targetDeviceId;
+
+    if (previous == DeviceState::Connected) {
+        dropConnection(!pairing);   // normal mode: nobody asked for this, the link was lost
+        if (pairing) {
+            emit pairingSocketClosed();   // expected after status 1, an error before it: the controller decides
+        }
+    } else if (previous == DeviceState::Connecting) {
         dropConnection(false);
-        emit connectionFailed(id);
+        if (pairing) {
+            emit pairingConnectionFailed();
+        } else {
+            emit connectionFailed(id);
+        }
     }
 }
 
@@ -159,14 +198,19 @@ void ConnectionManager::onConnectTimeout()
     if (m_state != DeviceState::Connecting) {
         return;
     }
+    const bool pairing = m_pairingMode;
     const QString id = m_targetDeviceId;
     dropConnection(false);
-    emit connectionFailed(id);
+    if (pairing) {
+        emit pairingConnectionFailed();
+    } else {
+        emit connectionFailed(id);
+    }
 }
 
-void ConnectionManager::onLivenessTimeout()
+void ConnectionManager::onAliveTimeout()
 {
-    if (m_state != DeviceState::Connected) {
+    if (m_state != DeviceState::Connected || m_pairingMode) {
         return;
     }
     qWarning() << "No data from device for" << kLivenessTimeoutMs << "ms: connection considered lost";
@@ -189,11 +233,17 @@ void ConnectionManager::onSocketMessageReceived(const QString &message)
     const QString type = root.value(QStringLiteral("type")).toString();
     const QJsonObject payload = root.value(QStringLiteral("payload")).toObject();
 
+    if (m_pairingMode) {
+        // Only pairing_status matters here. The liveness timer is never armed in this mode.
+        if (type == QStringLiteral("pairing_status")) {
+            emit pairingStatusChanged(payload.value(QStringLiteral("status")).toInt(),
+                                      payload.value(QStringLiteral("device_id")).toString());
+        }
+        return;
+    }
+
     if (type == QStringLiteral("data")) {
-        m_livenessTimer->start(); // first data frame arms the watchdog, every next one restarts it
+        m_aliveTimer->start(); // first data frame arms the watchdog, every next one restarts it
         emit dataReceived(payload, m_activeDeviceId, QDateTime::currentDateTime());
-    } else if (type == QStringLiteral("pairing_status")) {
-        emit pairingStatusChanged(payload.value(QStringLiteral("status")).toInt(),
-                                  payload.value(QStringLiteral("device_id")).toString());
     }
 }

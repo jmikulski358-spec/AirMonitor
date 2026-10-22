@@ -84,6 +84,8 @@ target_sources(AirMonitorApp PRIVATE
     src/charts/ChartDrawer.h
     src/notifications/NotificationInbox.cpp
     src/notifications/NotificationInbox.h
+    src/network/PairingController.cpp
+    src/network/PairingController.h
 )
 
 target_link_libraries(AirMonitorApp
