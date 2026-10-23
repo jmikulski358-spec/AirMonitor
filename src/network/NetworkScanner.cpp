@@ -1,16 +1,22 @@
 #include "network/NetworkScanner.h"
+#include "database/DatabaseManager.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QNetworkDatagram>
 
-NetworkScanner::NetworkScanner(QObject *parent)
+NetworkScanner::NetworkScanner(DatabaseManager *database, QObject *parent)
     : QObject(parent)
+    , m_database(database)
     , m_socket(new QUdpSocket(this))
     , m_scanTimer(new QTimer(this))
     , m_repeatTimer(new QTimer(this))
 {
+    if(!m_database){
+        qWarning() << "NetworkSacnner: no database attached, unable to scan for devices";
+    }
+
     m_socket->bind(QHostAddress::AnyIPv4, 0);
 
     m_scanTimer->setSingleShot(true);
@@ -20,11 +26,6 @@ NetworkScanner::NetworkScanner(QObject *parent)
     connect(m_socket, &QUdpSocket::readyRead, this, &NetworkScanner::onReadyRead);
     connect(m_scanTimer, &QTimer::timeout, this, &NetworkScanner::onScanTimeout);
     connect(m_repeatTimer, &QTimer::timeout, this, &NetworkScanner::scanNetwork);
-}
-
-void NetworkScanner::setPairedDevices(const QStringList &deviceIds)
-{
-    m_pairedDevices = deviceIds;
 }
 
 QStringList NetworkScanner::pairedDevices() const
@@ -53,7 +54,9 @@ void NetworkScanner::scanNetwork()
     if (m_scanTimer->isActive()) {
         return; // a scan is already running
     }
-    m_seenThisScan.clear();
+    if(m_database){
+        m_pairedDevices = m_database->pairedDevices(); //we like fresh new lists ;)
+    }m_seenThisScan.clear();
 
     QJsonObject request;
     request.insert(QStringLiteral("type"), QStringLiteral("discover"));

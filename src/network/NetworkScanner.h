@@ -9,14 +9,14 @@
 
 #include "core/DataTypes.h"
 
+class DatabaseManager;
+
 class NetworkScanner : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit NetworkScanner(QObject *parent = nullptr);
-
-    void setPairedDevices(const QStringList &deviceIds);
+    explicit NetworkScanner(DatabaseManager *databse, QObject *parent = nullptr);
     QStringList pairedDevices() const;
     QList<DiscoveredDevice> activeDevices() const;
 
@@ -40,6 +40,7 @@ private:
     static constexpr int kScanIntervalMs = 7000;
     static constexpr int kMaxMissedScans = 2;
 
+    DatabaseManager *m_database = nullptr;
     QStringList m_pairedDevices;
     QList<DiscoveredDevice> m_knownDevices;
     QList<DiscoveredDevice> m_seenThisScan;
