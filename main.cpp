@@ -15,6 +15,7 @@
 #include "database/DatabaseManager.h"
 #include "charts/ChartDrawer.h"
 #include "notifications/NotificationInbox.h"
+#include "network/PairingController.h"
 
 int main(int argc, char *argv[])
 {
@@ -22,13 +23,8 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("AirMonitor");
 
     DatabaseManager databaseManager;
-    databaseManager.addPairedDevice(QStringLiteral("A1B2C3"), QStringLiteral("Mock 1"));
-    databaseManager.addPairedDevice(QStringLiteral("D4E5F6"), QStringLiteral("Mock 2")); // temporary: normally after pairing
 
-
-    NetworkScanner scanner;
-    scanner.setPairedDevices({"A1B2C3", "D4E5F6"});
-    qDebug() << "PAIRED:" << scanner.pairedDevices();
+    NetworkScanner scanner(&databaseManager);
     NotificationInbox notificationInbox(&databaseManager);
     ChartDrawer chartDrawer(&databaseManager);
 
@@ -39,6 +35,7 @@ int main(int argc, char *argv[])
     FanController fanController(&connectionManager);
     EventMonitor eventMonitor;
     NotificationBuilder notificationBuilder;
+    PairingController pairingController(&connectionManager, &databaseManager);
 
     QQmlApplicationEngine engine;
     QObject::connect(
@@ -91,6 +88,14 @@ int main(int argc, char *argv[])
                      &notificationInbox, &NotificationInbox::onActiveDeviceChanged);
     QObject::connect(&connectionManager, &ConnectionManager::activeDeviceChanged,
                      &chartDrawer, &ChartDrawer::onActiveDeviceChanged);
+    QObject::connect(&connectionManager, &ConnectionManager::pairingConnectionChanged,
+                     &pairingController, &PairingController::onPairingConnectionChanged);
+    QObject::connect(&connectionManager, &ConnectionManager::pairingConnectionFailed,
+                     &pairingController, &PairingController::onPairingConnectionFailed);
+    QObject::connect(&connectionManager, &ConnectionManager::pairingSocketClosed,
+                     &pairingController, &PairingController::onPairingSocketClosed);
+    QObject::connect(&connectionManager, &ConnectionManager::pairingStatusChanged,
+                     &pairingController, &PairingController::onPairingStatusChanged);
 
     QObject::connect(&notificationInbox, &NotificationInbox::notificationsChanged,
                     [&notificationInbox]() {
@@ -150,14 +155,22 @@ int main(int argc, char *argv[])
     QObject::connect(&scanner, &NetworkScanner::devicesChanged,
                      [](const QList<DiscoveredDevice> &devices) {
                          qDebug() << "DEVICE LIST:" << devices.size();
-                         for (const DiscoveredDevice &d : devices) {
-                             qDebug() << "  -" << d.deviceId << d.address << d.port;
-                         }
-                     });
+        for (const DiscoveredDevice &d : devices) {
+            qDebug() << "  -" << d.deviceId << d.address << d.port;
+        }
+    });
+
+    QObject::connect(&pairingController, &PairingController::pairingStateChanged,
+                     [](PairingState s) { qDebug() << "PAIRING STATE:" << static_cast<int>(s); });
+    QObject::connect(&pairingController, &PairingController::pairingSucceeded,
+                     [](const QString &id) { qDebug() << "PAIRED:" << id; });
+    QObject::connect(&pairingController, &PairingController::accessPointNotReachable,
+                     []() { qDebug() << "AP not reachable"; });
+
     QObject::connect(&connectionManager, &ConnectionManager::connectionStatusChanged,
                      [](const QString &id, DeviceState s) {
                          qDebug() << "STATE:" << id << static_cast<int>(s);   // 0 Disconnected, 1 Connecting, 2 Connected
-                     });
+    });
     QObject::connect(&connectionManager, &ConnectionManager::connectionLost,
                      [](const QString &id) { qDebug() << "LOST:" << id; });
     QObject::connect(&connectionManager, &ConnectionManager::connectionFailed,
@@ -175,13 +188,20 @@ int main(int argc, char *argv[])
         }
     };
     QTimer::singleShot(4000,  [connectToListed]() { connectToListed(0); });
-    QTimer::singleShot(14000, [connectToListed]() { connectToListed(1); });
+    QTimer::singleShot(8000, [connectToListed]() { connectToListed(1); });
     QTimer::singleShot(14000, [&connectionManager]() { connectionManager.disconnectFromDevice(); }); */
 
-    connectionManager.connectToDevice(QStringLiteral("SILENT"), QHostAddress(QStringLiteral("127.0.0.1")), 83);
+    //connectionManager.connectToDevice(QStringLiteral("SILENT"), QHostAddress(QStringLiteral("127.0.0.1")), 83);
 
-    scanner.scanNetwork();
+    //QTimer::singleShot(1000, [&scanner](){scanner.scanNetwork();});
 
+    //QTimer::singleShot(3000, [&pairingController]() {pairingController.startPairing();});
+    //QTimer::singleShot(5000, [&pairingController]() {pairingController.connectToAccessPoint();});
+    //QTimer::singleShot(8000, [&pairingController]() {pairingController.submitCredentials("Home","secret");});
+
+    QTimer::singleShot(1000, [&scanner](){qDebug() << "PAIRED:" << scanner.pairedDevices();});
+
+    QTimer::singleShot(16000, [&scanner](){qDebug() << "PAIRED:" << scanner.pairedDevices();});
 
     return QGuiApplication::exec();
 }

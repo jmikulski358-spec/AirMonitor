@@ -65,8 +65,6 @@ target_sources(AirMonitorApp PRIVATE
     src/core/DataTypes.h
     src/network/ConnectionManager.h
     src/network/ConnectionManager.cpp
-    src/network/CredentialsQuery.h
-    src/network/CredentialsQuery.cpp
     src/network/NetworkScanner.h
     src/network/NetworkScanner.cpp
     src/monitoring/ParameterMonitor.h

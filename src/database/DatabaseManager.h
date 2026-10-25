@@ -16,6 +16,7 @@ class DatabaseManager : public QObject {
 
 public:
     explicit DatabaseManager(QObject *parent = nullptr);
+    bool isReady() const { return m_ready; }     // For in app db.
 
     // Devices
     QStringList pairedDevices() const;
@@ -31,6 +32,9 @@ public:
     QList<QPointF> readingSeries(const QString &deviceId, Parameter parameter,
                                  const DateRange &range, qint64 bucketMs) const;
 
+
+
+
 public slots:
     void saveReading(const SensorReading &reading, const QString &deviceId, const QDateTime &timestamp);
 
@@ -38,6 +42,7 @@ private slots:
     void purgeOldReadings();
 
 private:
+    bool m_ready = false;
     bool runSql(const QString &sql);
 
     static constexpr qint64 kReadingSaveIntervalMs = 60 * 1000;

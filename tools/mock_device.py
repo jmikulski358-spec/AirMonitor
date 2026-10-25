@@ -8,10 +8,12 @@ import argparse
 import websockets
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--id", default="A1B2C3")
+parser.add_argument("--id", default="F0E1D2")
 parser.add_argument("--port", type=int, default=81)
 parser.add_argument("--freeze-after", type=float, default=None,
                     help="seconds after a client connects: stop sending data but keep the socket open")
+parser.add_argument("--ignore-fan-commands", action="store_true",
+                    help="accept fan_regulation_request but do not apply it (tests the timeout)")
 args = parser.parse_args()
 
 DISCOVERY_PORT = 45678
@@ -51,7 +53,7 @@ def build_data_frame():
                     "current_mode": state["mode"],
                     "current_speed": current_speed(),
                },
-               "filter_state": {"filter_use_percentage": 65},
+               "filter_state": {"filter_life_percentage": 65},
           } 
      }
 
@@ -102,9 +104,16 @@ async def handle_message(websocket, raw):
         return
     if not isinstance(message, dict):
         return
+   
 
     kind = message.get("type")
     payload = message.get("payload") or {}
+
+    if kind == "fan_regulation_request":
+            if args.ignore_fan_commands:
+                print("[WS] fan command ignored (test)")
+                return
+            state["mode"] = payload.get("new_mode", state["mode"])
 
     if kind == "fan_regulation_request":
         state["mode"] = payload.get("new_mode", state["mode"])

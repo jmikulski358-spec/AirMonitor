@@ -70,6 +70,7 @@ DatabaseManager::DatabaseManager(QObject *parent)
     purgeOldReadings();
 
     if (allOk) {
+        m_ready = true;
         qDebug() << "Database ready:" << filePath;
     }
 }

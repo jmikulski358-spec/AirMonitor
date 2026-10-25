@@ -35,10 +35,12 @@ std::optional<int> FilterMonitor::currentFilterLifePercentage() const
 
 void FilterMonitor::onDataReceived(const QJsonObject &payload, const QString &deviceId, const QDateTime &timestamp)
 {
+
     const QJsonObject filterState = payload.value(QStringLiteral("filter_state")).toObject();
     const QJsonValue value = filterState.value(QStringLiteral("filter_life_percentage"));
 
     if (!value.isDouble()) {
+
         return;
     }
 
@@ -53,8 +55,14 @@ void FilterMonitor::onDataReceived(const QJsonObject &payload, const QString &de
         //even if its the same as it was.
     }
 
+    const std::optional<int> previous = m_filterLifePercentage;
+
     m_filterLifePercentage = percentage;
     emit filterPercentageChanged(percentage, deviceId, timestamp);
+
+    if (previous && percentage - *previous >= kReplacedJumpPercent) {
+        emit filterReplaced(deviceId, timestamp);
+    }
 }
 
 void FilterMonitor::onActiveDeviceChanged()

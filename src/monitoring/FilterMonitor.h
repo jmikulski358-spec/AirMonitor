@@ -31,4 +31,5 @@ signals:
 private:
     std::optional<int> m_filterLifePercentage;
     ConnectionManager *m_connectionManager = nullptr;
+    static constexpr int kReplacedJumpPercent = 20;
 };
